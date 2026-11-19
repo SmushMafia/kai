@@ -1,0 +1,107 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0;font-family:system-ui,sans-serif}</style>
+<title>鸡飞火球大作战</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap">
+<style>
+  /* 布局：一块游戏画布为主角，上方标题、下方键位说明，单列居中 */
+  /* --p1/--p2 只是兜底，真正的角色色由 main.js 从 characters.js 写入 */
+  :root{
+    --bg:#faf6ef; --fg:#3c3528; --muted:#8a8070; --card:#ffffff;
+    --border:#e5dcc8; --p1:#f08c1e; --p2:#8a6cf0; --keycap:#f3ede0;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#17150f; --fg:#efe8d8; --muted:#9a917d; --card:#211e15;
+      --border:#3a352a; --keycap:#2e2a1e;
+      color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#17150f; --fg:#efe8d8; --muted:#9a917d; --card:#211e15;
+    --border:#3a352a; --keycap:#2e2a1e;
+    color-scheme:dark;
+  }
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:"ZCOOL KuaiLe","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+    padding-left:max(16px, env(safe-area-inset-left, 0px));
+    padding-right:max(16px, env(safe-area-inset-right, 0px));
+    padding-block:20px;
+  }
+  .wrap{max-width:1020px; margin:0 auto; display:flex; flex-direction:column; gap:14px}
+  header h1{
+    margin:0; font-size:clamp(26px,4.5vw,38px); font-weight:400; text-wrap:balance; letter-spacing:1px;
+  }
+  header h1 .vs{font-size:.6em; color:var(--muted); margin:0 .25em}
+  header h1 .c1{color:var(--p1)} header h1 .c2{color:var(--p2)}
+  header p{margin:4px 0 0; color:var(--muted); font-size:15px}
+  .stage{
+    position:relative; border:2px solid var(--border); border-radius:14px; overflow:hidden;
+    background:#f7e9c6; /* 画布底色固定：阳光竞技场，自成一个世界 */
+  }
+  canvas{display:block; width:100%; height:auto}
+  .ko{
+    position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; align-items:center;
+    gap:10px; background:rgba(40,28,8,.45); backdrop-filter:blur(2px); text-align:center; padding:16px;
+  }
+  .ko[hidden]{display:none} /* display:flex 会压过 hidden 属性的浏览器默认 display:none，必须显式补回 */
+  .ko .big{font-size:clamp(48px,9vw,86px); color:#fff; text-shadow:0 4px 0 rgba(0,0,0,.35); animation:pop .45s cubic-bezier(.2,2.2,.4,1) both}
+  .ko .who{font-size:clamp(20px,3.5vw,30px); color:#ffe9b0}
+  .ko button{
+    font:inherit; font-size:20px; padding:10px 28px; border-radius:999px; border:0; cursor:pointer;
+    background:#ffd34d; color:#4a3608; box-shadow:0 4px 0 #cf9f1c; margin-top:6px;
+  }
+  .ko button:active{transform:translateY(3px); box-shadow:0 1px 0 #cf9f1c}
+  .ko button:focus-visible{outline:3px solid #fff; outline-offset:2px}
+  @keyframes pop{from{transform:scale(.2) rotate(-8deg); opacity:0}to{transform:scale(1) rotate(-3deg); opacity:1}}
+  .legend{display:flex; gap:12px; flex-wrap:wrap}
+  .side{
+    flex:1 1 300px; min-width:0; background:var(--card); border:1.5px solid var(--border);
+    border-radius:12px; padding:12px 14px;
+  }
+  .side h2{margin:0 0 8px; font-size:17px; font-weight:400; display:flex; align-items:center; gap:8px}
+  .dot{width:14px; height:14px; border-radius:50%; flex:none}
+  .side[data-p="1"] h2{color:var(--p1)} .side[data-p="1"] .dot{background:var(--p1)}
+  .side[data-p="2"] h2{color:var(--p2)} .side[data-p="2"] .dot{background:var(--p2)}
+  .row{display:flex; align-items:center; gap:8px; margin:6px 0; font-size:14.5px; flex-wrap:wrap}
+  .row .what{color:var(--muted)}
+  kbd{
+    display:inline-block; min-width:26px; text-align:center; padding:3px 7px; border-radius:6px;
+    background:var(--keycap); border:1.5px solid var(--border); border-bottom-width:3px;
+    font-family:inherit; font-size:13.5px;
+  }
+  .note{color:var(--muted); font-size:13.5px; margin:0}
+  .note b{color:var(--fg); font-weight:400}
+</style>
+
+<div class="wrap">
+  <header>
+    <!-- 标题和图例由 main.js 从 characters.js / skills.js 生成，页面里不写死键位和名字 -->
+    <h1 id="title"></h1>
+    <p>同一块键盘，两个人，四个离谱技能。先把对面打到 0 血的赢！</p>
+  </header>
+
+  <div class="stage">
+    <canvas id="cv" width="960" height="560" aria-label="对战竞技场"></canvas>
+    <div class="ko" id="koBox" hidden>
+      <div class="big" id="koText">KO！</div>
+      <div class="who" id="koWho"></div>
+      <button id="again">再来一局</button>
+    </div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+
+  <p class="note"><b>给大人看的小字：</b>每个技能只是 skills.js 里的一个配置对象（生成什么 × 怎么动 × 长什么样），角色和键位在 characters.js。想要「会放电的乌云」？加一段配置就行——这正是孩子口述、AI 秒改的接口。需要实体键盘，俩人挤一挤更好玩。</p>
+</div>
+
+<!-- 按依赖顺序加载：配置 → 特效 → 引擎 → 渲染 → 装配。普通 script，无需构建，直接双击打开 -->
+<script src="skills.js"></script>
+<script src="characters.js"></script>
+<script src="fx.js"></script>
+<script src="engine.js"></script>
+<script src="render.js"></script>
+<script src="main.js"></script>
