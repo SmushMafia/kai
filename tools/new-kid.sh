@@ -54,5 +54,5 @@ PY
 git remote add "kid-$ID" "https://github.com/$OWNER/$REPO.git" 2>/dev/null || true
 git add hub/kids.json && git commit -qm "hub: add $NAME" && git push -q
 
-echo "完成：把 dist/$REPO.zip 发给 $NAME（里面有写权限密钥，别外传）"
+echo "完成：把 dist/$REPO.zip 发给 ${NAME}（里面有写权限密钥，别外传）"
 echo "他的版本：https://$(tr A-Z a-z <<<"$OWNER").github.io/$REPO/  （首次部署约 1 分钟）"
