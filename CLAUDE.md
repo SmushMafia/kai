@@ -4,34 +4,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 运行
 
-无构建、无依赖、无测试框架：浏览器直接打开 `index.html` 即可（file:// 可用）。改完代码刷新页面验证。
+无构建、无 npm 依赖、无测试框架。必须用本地服务器打开（ES 模块在 `file://` 下会被浏览器拦截，页面会提示）：
 
-普通 `<script>` 全局变量串联，**不是 ES 模块**。加载顺序写死在 index.html 底部：`skills.js → characters.js → fx.js → engine.js → render.js → main.js`，后面的文件直接用前面的全局名（`SKILLS`、`CHARACTERS`、`W`、`puff` 等）。
+```
+python3 -m http.server     # 然后打开 http://localhost:8000
+```
+
+three.js 生态全部经 `index.html` 里的 importmap 从 jsDelivr 加载，版本钉死：three@0.186.1、three.quarks@0.17.1（依赖 quarks.core@0.17.1）、postprocessing@6.39.5。postprocessing 6.39.5 要求 three < 0.187，升级 three 前先查兼容。
+
+两种脚本混用：`skills.js → characters.js → fx.js → engine.js` 是普通 `<script>`，靠全局变量串联；`render.js`、`main.js` 是 ES 模块（模块里能直接读写这些全局 `let`/`const`）。`main.js` 用 `window.keys` 把键盘状态暴露给 engine.js。
 
 ## 项目定位
 
 本地双人同键盘对战游戏的最简框架，目标用户是初中生（口述点子、AI 改配置）。改动要保持这个定位：**优先加配置，不加抽象**；文档和注释精简、机制为主、不自创 flavor。
 
-## 架构：配置 ↔ 引擎分离
-
-两类文件，职责严格分开：
+## 架构：配置 ↔ 引擎 ↔ 渲染
 
 **配置文件（孩子/AI 改的）**
-- `characters.js` — `CHARACTERS` 数组：名字/颜色/键位/技能列表/出生点。标题、图例、主题色全部由 main.js 从这里生成，页面无硬编码。
-- `skills.js` — `SKILLS` 对象：每个技能 = 一个配置对象，三层参数化：`spawn`（生成什么：数量/位置/初速）× `entity`（怎么动：`behavior` 字段 + `hit` 打击参数）× `look`（长什么样：`draw` 函数名 + 颜色）。
+- `characters.js` — `CHARACTERS`：名字/颜色/键位/技能列表/出生点。标题、图例、主题色由 main.js 从这里生成。
+- `skills.js` — `SKILLS`：每个技能 = 一个配置对象，`spawn`（生成什么）× `entity`（`behavior` 怎么动 + `hit` 打击参数）× `look`（`draw` 造型名 + 颜色）。
 
-**引擎文件（框架层）**
-- `engine.js` — 状态 + 规则，不碰 DOM。核心是两个注册表式入口：`cast()` 是所有技能的唯一施放路径；`BEHAVIORS` 是行为库（seek/projectile/trap/aura/zone），`entity.behavior` 按名挑选。命中统一走 `hitCheck()`/`damage()`，屏震/闪白/击退/漂浮字由引擎层免费送。
-- `render.js` — 只读状态只管画。`LOOKS` 是外观库（chicken/banana/fireball/cloud/none），`look.draw` 按名挑选。
-- `fx.js` — 粒子/漂浮字/屏震，不认识玩家和技能，引擎和渲染都调它。
-- `main.js` — 装配：从配置生成标题/图例/CSS 变量、键盘输入、KO 弹层、requestAnimationFrame 主循环。
+**框架层**
+- `engine.js` — 状态 + 规则，不碰 DOM、不知道 three.js。`cast()` 是所有技能的唯一施放路径；`BEHAVIORS` 按 `entity.behavior` 挑行为。命中统一走 `hitCheck()`/`damage()`：伤害、击退、命中定格 `hitstop`（`hit.stop` 可覆盖）、定向屏震、漂浮字都在这里。
+- `fx.js` — 特效**事件队列**：引擎调 `burst/boom/ring/puff/smoke/scorch/confetti` 只是往 `fxQueue` 排事件，不画任何东西。漂浮字 `floats`、屏震 `shake/shakeDir`、闪白 `flashA` 是状态。`resetFx()` 递增 `fxEpoch`，渲染层据此清场。
+- `render.js` — three.js 场景，只读状态。三个按名挑选的注册表：
+  - `LOOKS[look.draw](en)` 建实体模型，返回 `{ obj, update(en, t) }`；
+  - `FX[event.type](e)` 把 fx 事件变成 three.quarks 粒子（原型在 `FXP`，每次 `clone()` 一份，`autoDestroy` 自动回收）；
+  - 角色模型在 `makePlayerView/updatePlayerView`。
+  HUD、漂浮字、倒计时/KO 大字、闪白画在上层 2D 画布 `#hud`。
+- `main.js` — 装配：标题/图例、键盘输入、KO 弹层、requestAnimationFrame 主循环（`update(dt)` → `draw(t)`）。
 
-**扩展路径**：新技能 = 在 SKILLS 加对象（零代码）；现有 behavior/draw 不够用时，才在 engine.js 的 BEHAVIORS 或 render.js 的 LOOKS 加一个函数，然后配置里按名引用。
+**扩展路径**：新技能 = 在 SKILLS 加对象；现有 behavior/造型不够时，才在 `BEHAVIORS` 或 `LOOKS` 加一个函数，配置里按名引用。新特效 = `FXP` 加原型 + `FX` 加事件处理，引擎侧在 fx.js 加一个排事件的函数。
 
 ## 需要知道的约定
 
-- 键位两套写法：`CHARACTERS.keys` 写键码（`KeyW`/`ArrowUp`），`SKILLS.key` 写标注（`'Q'`/`'.'`），换算函数 `skillKeyCode()`/`keyLabelOf()` 在 engine.js 顶部。
-- 场地常量在 engine.js：`W=960, H=560, WALL, TOP`（TOP 下方才是可活动区，上方是 HUD）。手感参数集中在 `TUNING`。
-- 观赏兜底原则：点子不拒绝，量级悄悄截断——`ENTITY_CAP`（engine.js）和 `PARTICLE_CAP`（fx.js）。新玩法照此办理，别弹错误。
-- `prefers-reduced-motion` 已接入（fx.js 的 `REDUCED`）：屏震/慢动作/彩带数量都按它降级，新特效也要照顾。
-- 深浅色主题用 CSS 变量（index.html），画布内世界是固定的"阳光竞技场"配色，不随主题变。
+- 坐标：游戏 `(x, y)` 平面 = three 的 XZ 地面，1 像素 = 1 单位，Y 朝上。换算用 render.js 的 `wx()/wz()`。场地常量 `W/H/WALL/TOP` 在 engine.js，镜头 `fitCamera()` 自动把整片场地放进画面并给顶部 HUD 留空。
+- 发光靠 bloom（阈值 1.3）：想让东西发光就用 `hdr()/hdrC()` 把颜色乘到 1 以上；普通材质保持 ≤1，否则地面也会泛光。
+- 点光源是固定 4 个的池（`takeLight/freeLight/pulseLight`），不要临时 `new PointLight`——光源数量变化会让所有材质重编译卡顿。
+- 定格/慢动作也作用于粒子：`BATCH.update` 用 `hitstop`/`slowmo` 缩放时间。
+- 观赏兜底原则：点子不拒绝，量级悄悄截断——`ENTITY_CAP`（engine.js）、`FX_QUEUE_CAP`（fx.js）、`FX_SYSTEM_CAP`（render.js）。
+- `prefers-reduced-motion`（fx.js 的 `REDUCED`）：屏震/闪白/慢动作/KO 推镜头关闭，粒子数量 ×0.4。
+- 键位两套写法：`CHARACTERS.keys` 写键码（`KeyW`/`ArrowUp`），`SKILLS.key` 写标注（`'Q'`/`'.'`），换算在 engine.js 顶部。
+- 素材占位：`CHARACTERS[i].image` / `look.image` 可选，写了就用图片面片代替程序模型，未写或未加载完回退程序模型。

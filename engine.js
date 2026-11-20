@@ -22,21 +22,21 @@ function keyLabelOf(code){
 }
 
 /* ---------- 状态 ---------- */
-let p1, p2, entities, state, stateT, slowmo, winner, koShown;
+let p1, p2, entities, state, stateT, slowmo, winner, koShown, hitstop;
 
 function mkPlayer(c){
   const kmap = { up:c.keys.up, down:c.keys.down, left:c.keys.left, right:c.keys.right };
   c.skills.forEach((id, i) => kmap['s'+i] = skillKeyCode(SKILLS[id].key));
-  return { name:c.name, color:c.color, dark:c.dark, x:c.spawnX, y:(H+TOP)/2, vx:0, vy:0,
-    r:26, baseR:26, scale:1, hp:100, kmap, skills:c.skills.map(id => ({ id, t:0 })),
+  return { name:c.name, color:c.color, dark:c.dark, image:c.image, x:c.spawnX, y:(H+TOP)/2, vx:0, vy:0,
+    r:26, baseR:26, scale:1, scaleV:0, hp:100, kmap, skills:c.skills.map(id => ({ id, t:0 })),
     facing:c.spawnX < W/2 ? 1 : -1,
-    stun:0, spin:0, flash:0, wince:0, stompCd:0, mods:null, blink:0, dead:false };
+    stun:0, spin:0, flash:0, wince:0, hitAng:0, castT:0, stompCd:0, mods:null, blink:0, dead:false };
 }
 
 function reset(){
   p1 = mkPlayer(CHARACTERS[0]); p2 = mkPlayer(CHARACTERS[1]);
   entities = []; resetFx();
-  state = 'countdown'; stateT = 3.4; slowmo = 0; winner = null; koShown = false;
+  state = 'countdown'; stateT = 3.4; slowmo = 0; winner = null; koShown = false; hitstop = 0;
 }
 const other = p => p === p1 ? p2 : p1;
 
@@ -51,6 +51,7 @@ function keyPressed(code){
 function cast(p, slot){
   const cfg = SKILLS[slot.id]; slot.t = cfg.cd;
   shout(p, cfg.shout);
+  p.castT = .18; // 施法蓄力：渲染层据此压扁角色
   const foe = other(p), sp = cfg.spawn;
   for (let i = 0; i < sp.count; i++){
     if (entities.length >= ENTITY_CAP) break;
@@ -61,14 +62,19 @@ function cast(p, slot){
       const a = Math.atan2(foe.y - p.y, foe.x - p.x);
       x += Math.cos(a)*(p.r + sp.dist); y += Math.sin(a)*(p.r + sp.dist);
       vx = Math.cos(a)*sp.speed; vy = Math.sin(a)*sp.speed;
+      if (i === 0){ p.vx -= Math.cos(a)*110; p.vy -= Math.sin(a)*110; ring(x, y, '#ffb13d', 22); } // 后坐力 + 枪口光圈
     }
     spawnEntity(p, cfg.entity, cfg.look, x, y, vx, vy, i);
   }
 }
 function spawnEntity(owner, e, look, x, y, vx, vy, seed){
   entities.push({ owner, cfg:e, look:look || e.look, x, y, vx, vy,
-    life:e.life ?? e.duration ?? 5, age:0, r:e.r || 10, seed:seed || 0, armed:!e.armDelay, trailT:0 });
-  if (e.behavior === 'aura'){ owner.mods = e.mods; owner.auraT = e.duration; popText(owner.x, owner.y - 50, '变大了！', '#fff', 26); }
+    life:e.life ?? e.duration ?? 5, age:0, r:e.r || 10, seed:seed || 0, armed:!e.armDelay });
+  if (e.behavior === 'aura'){
+    owner.mods = e.mods; owner.auraT = e.duration;
+    popText(owner.x, owner.y - 50, '变大了！', '#fff', 26);
+    ring(owner.x, owner.y, '#fff', 90); bump(6);
+  }
 }
 
 /* ---------- 行为库：behavior 字段挑一个 ---------- */
@@ -84,7 +90,6 @@ const BEHAVIORS = {
   },
   projectile(en, dt){
     en.x += en.vx*dt; en.y += en.vy*dt;
-    if (en.cfg.trail){ en.trailT -= dt; if (en.trailT <= 0){ en.trailT = .028; puff(en.x, en.y, en.cfg.trail, 1); } }
     const s = en.cfg.split;
     if (s && en.age >= s.after){
       const base = Math.atan2(en.vy, en.vx);
@@ -118,6 +123,7 @@ const BEHAVIORS = {
       en.zapT = 0;
       if (!foe.dead && Math.hypot(en.x - foe.x, en.y - foe.y) <= z.zapR){
         en.boltT = .16; en.boltX = foe.x; en.boltY = foe.y;
+        flash(.15);
         damage(foe, en.cfg.damage || 0, en.x, en.y, en.cfg.hit || {});
         burst(foe.x, foe.y, (en.cfg.hit && en.cfg.hit.burst) || 'star', 8);
       }
@@ -139,15 +145,16 @@ function damage(foe, dmg, fx, fy, h){
   foe.hp = Math.max(0, foe.hp - dmg);
   const a = Math.atan2(foe.y - fy, foe.x - fx);
   foe.vx += Math.cos(a) * (h.knockback || 120); foe.vy += Math.sin(a) * (h.knockback || 120);
-  foe.flash = .14; foe.wince = .4; bump(h.shake || 4);
-  popText(foe.x, foe.y - foe.r*foe.scale - 14, h.pop || ('-'+dmg), '#fff', 20);
-  popText(foe.x + 24, foe.y - foe.r*foe.scale - 34, '-'+dmg, '#ffd34d', 17);
+  foe.flash = .14; foe.wince = .4; foe.hitAng = a;
+  bump(h.shake || 4, Math.cos(a), Math.sin(a));
+  hitstop = Math.max(hitstop, h.stop ?? Math.min(.11, dmg*.008)); // 命中定格：伤害越高冻得越久
+  popText(foe.x, foe.y - foe.r - 18, h.pop || ('-'+dmg), '#fff', 18 + Math.min(14, dmg*.8), h.pop ? '-'+dmg : null);
   if (foe.hp <= 0) ko(foe);
 }
 function ko(loser){
   loser.dead = true; state = 'ko'; stateT = 0; winner = other(loser);
-  slowmo = REDUCED ? 0 : .9; bump(12);
-  for (let i = 0; i < (REDUCED ? 12 : 60); i++) confetti(W);
+  slowmo = REDUCED ? 0 : .9; bump(12); flash(.6); hitstop = .3;
+  confetti(REDUCED ? 12 : 60);
 }
 function shout(p, text){ popText(p.x, p.y - p.r*p.scale - 30, text, '#fff', 18); }
 
@@ -155,7 +162,8 @@ function shout(p, text){ popText(p.x, p.y - p.r*p.scale - 30, text, '#fff', 18);
 function updatePlayer(p, dt){
   if (p.dead){ p.spin += dt*6; return; }
   const mods = p.mods, speed = TUNING.moveSpeed * (mods ? mods.speed : 1);
-  p.scale += ((mods ? mods.scale : 1) - p.scale) * Math.min(1, dt*10);
+  p.scaleV += (((mods ? mods.scale : 1) - p.scale)*180 - p.scaleV*14) * dt; // 弹簧：变身时先冲过头再回落
+  p.scale += p.scaleV*dt;
   p.r = p.baseR * p.scale;
   if (p.stun > 0){ p.stun -= dt; p.spin += dt*14; p.vx *= Math.pow(.6, dt*2); p.vy *= Math.pow(.6, dt*2); }
   else {
@@ -175,6 +183,7 @@ function updatePlayer(p, dt){
   p.x = Math.max(WALL + p.r, Math.min(W - WALL - p.r, p.x));
   p.y = Math.max(TOP + p.r, Math.min(H - WALL - p.r, p.y));
   p.flash = Math.max(0, p.flash - dt); p.wince = Math.max(0, p.wince - dt);
+  p.castT = Math.max(0, p.castT - dt);
   p.stompCd = Math.max(0, p.stompCd - dt);
   p.blink -= dt; if (p.blink < -.12) p.blink = 2.2 + Math.random()*2;
   p.skills.forEach(s => s.t = Math.max(0, s.t - dt));
@@ -190,6 +199,7 @@ function updatePlayer(p, dt){
 function update(dt){
   stateT -= dt;
   if (state === 'countdown' && stateT <= 0) state = 'play';
+  if (hitstop > 0){ hitstop -= dt; updateFx(dt, true); return; }
   const ts = slowmo > 0 ? .22 : 1; slowmo = Math.max(0, slowmo - dt);
   dt *= ts;
   updatePlayer(p1, dt); updatePlayer(p2, dt);

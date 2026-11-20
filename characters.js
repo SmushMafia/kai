@@ -4,6 +4,7 @@
    skills 里的名字对应 skills.js 的技能；名字 / 颜色 / 键位 / 图例 / 标题
    全部从这里生成——改一处，页面和游戏一起跟着变。
    keys 用键码（KeyW / ArrowUp 这种）；spawnX 是出生点横坐标（场地宽 960）。
+   image 可选（素材占位）：透明底 PNG 路径，写了就用图片代替程序画的圆球和脸。
    ============================================================================ */
 const CHARACTERS = [
   {
@@ -12,6 +13,7 @@ const CHARACTERS = [
     keys:{ up:'KeyW', down:'KeyS', left:'KeyA', right:'KeyD' },
     skills:['chickens','banana'],
     spawnX:200,
+    // image:'assets/gugu.png',
   },
   {
     name:'泡泡法师',
@@ -19,5 +21,6 @@ const CHARACTERS = [
     keys:{ up:'ArrowUp', down:'ArrowDown', left:'ArrowLeft', right:'ArrowRight' },
     skills:['fireball','giant','stormcloud'],
     spawnX:760,
+    // image:'assets/paopao.png',
   },
 ];

@@ -1,8 +1,9 @@
-'use strict';
 /* ============================================================================
    页面装配：标题 / 图例从配置生成（键位、名字、颜色只有 characters.js +
    skills.js 一份），键盘输入、KO 弹层、主循环都在这里。
+   这是 ES 模块（要引 render.js）；配置和引擎是普通 script，全局变量直接用。
    ============================================================================ */
+import { fit, draw } from './render.js';
 const koBox = document.getElementById('koBox'), koWho = document.getElementById('koWho'), again = document.getElementById('again');
 
 /* ---------- 标题 + 主题色 ---------- */
@@ -38,7 +39,7 @@ function legendRow(keyLabels, what){
 }
 
 /* ---------- 输入 ---------- */
-const keys = {};
+const keys = window.keys = {}; // engine.js 读这个全局
 const USED = new Set();
 for (const c of CHARACTERS){
   Object.values(c.keys).forEach(k => USED.add(k));
