@@ -42,7 +42,7 @@ function show(i, bust){
 }
 
 fetch('kids.json', { cache:'no-store' }).then(r => r.json()).catch(() => []).then(kids => {
-  list = [{ id:'base', name:'骨架', url:'../' }, ...kids];
+  list = [{ id:'base', name:'base', url:'../' }, ...kids];
   const sp = tabs.querySelector('.sp');
   list.forEach((k, i) => {
     const b = document.createElement('button'); b.dataset.i = i; b.textContent = k.name;
