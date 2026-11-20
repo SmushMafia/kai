@@ -15,13 +15,22 @@
    key 是按键（字母直接写，如 'Q'；符号写 '.' '/' 等）；desc 显示在键位图例里。
    ============================================================================ */
 const SKILLS = {
-  guardbot: { // 召唤/守卫类
-    label:'护卫机器人', key:'Q', cd:9, desc:'🤖 悬浮机器人绕身护卫，对手靠近就电击',
+  guardbot: { // 召唤/守卫类：电击
+    label:'电击机器人', key:'Q', cd:9, desc:'⚡ 绕身护卫，对手靠近就电击',
     spawn:{ count:1, at:'self' },
     entity:{ behavior:'guard', life:12, r:16, damage:7,
-      guard:{ orbitR:72, spin:2.2, range:170, every:1.1 },
-      hit:{ knockback:190, shake:5, burst:'spark', pop:'滋！' } },
+      guard:{ orbitR:72, spin:2.2, range:170, every:1.1, attack:'shock' },
+      hit:{ knockback:190, shake:5, burst:'spark', pop:'滋！', element:'shock' } },
     look:{ draw:'bot', color:'#6ad0ff' },
-    shout:'护卫就位！'
+    shout:'电击护卫就位！'
+  },
+  flamebot: { // 召唤/守卫类：火焰；和电击短时间连中触发爆炸（见 engine.js 的 COMBO）
+    label:'火焰机器人', key:'E', cd:9, desc:'🔥 绕身护卫，火焰灼烧；电火连击会爆炸',
+    spawn:{ count:1, at:'self' },
+    entity:{ behavior:'guard', life:12, r:16, damage:7,
+      guard:{ orbitR:92, spin:-1.9, range:170, every:1.1, attack:'flame' },
+      hit:{ knockback:190, shake:5, burst:'ember', pop:'烫！', element:'flame' } },
+    look:{ draw:'bot', color:'#ff7a3d' },
+    shout:'火焰护卫就位！'
   },
 };

@@ -6,6 +6,7 @@
 const W = 960, H = 560, WALL = 14, TOP = 78;
 const ENTITY_CAP = 200; // 观赏兜底：点子不拒绝，量级悄悄截断
 const TUNING = { moveSpeed:230, moveAccel:1700, friction:.0008 }; // 「想跑得更快」改这里
+const COMBO = { window:.7, bonus:18, knockback:320, shake:10, color:'#ff9a3d', pair:{ shock:'flame', flame:'shock' } }; // 电+火短时间连中 → 爆炸，改这里调手感
 
 /* ---------- 键位标注 ↔ 键码（SKILLS.key 写 'Q' / '.'，这里换算成 e.code） ---------- */
 const LABEL_CODE = { '.':'Period', '/':'Slash', ',':'Comma', ';':'Semicolon', ' ':'Space' };
@@ -30,7 +31,8 @@ function mkPlayer(c){
   return { name:c.name, color:c.color, dark:c.dark, image:c.image, x:c.spawnX, y:(H+TOP)/2, vx:0, vy:0,
     r:26, baseR:26, scale:1, scaleV:0, hp:100, kmap, skills:c.skills.map(id => ({ id, t:0 })),
     facing:c.spawnX < W/2 ? 1 : -1,
-    stun:0, slowT:0, slowF:1, frozen:0, spin:0, flash:0, wince:0, hitAng:0, castT:0, stompCd:0, mods:null, blink:0, dead:false };
+    stun:0, slowT:0, slowF:1, frozen:0, spin:0, flash:0, wince:0, hitAng:0, castT:0, stompCd:0, mods:null, blink:0, dead:false,
+    elem:{ shock:0, flame:0 } }; // 元素命中倒计时：电/火在窗口内连中就爆炸
 }
 
 function reset(){
@@ -159,6 +161,15 @@ const BEHAVIORS = {
 };
 
 /* ---------- 命中：引擎层统一打击感 ---------- */
+function comboBlast(foe, fx, fy, dmg){ // 电+火连携爆炸：额外伤害 + 大特效，触发后清掉元素计时防重复
+  foe.elem.shock = foe.elem.flame = 0;
+  popText(foe.x, foe.y - foe.r - 52, '元素爆炸！', COMBO.color, 26, '-'+dmg);
+  boom(foe.x, foe.y, COMBO.color, 16); flash(.4); bump(COMBO.shake);
+  hitstop = Math.max(hitstop, .18);
+  foe.hp = Math.max(0, foe.hp - dmg);
+  const a = Math.atan2(foe.y - fy, foe.x - fx);
+  foe.vx += Math.cos(a)*COMBO.knockback; foe.vy += Math.sin(a)*COMBO.knockback;
+}
 function hitCheck(en, foe){
   if (foe.dead) return;
   if (Math.hypot(en.x - foe.x, en.y - foe.y) > en.r + foe.r) return;
@@ -179,6 +190,11 @@ function damage(foe, dmg, fx, fy, h){
   if (h.slow){ // 减速；已经在减速中又被命中、且配了 freeze，就冰冻
     if (foe.slowT > 0 && h.freeze){ foe.slowT = 0; foe.frozen = h.freeze; foe.vx = foe.vy = 0; popText(foe.x, foe.y - foe.r - 48, '冻住了！', '#bff0ff', 24); }
     else { foe.slowT = h.slow.duration; foe.slowF = h.slow.factor; }
+  }
+  if (h.element && foe.elem){ // 元素连携：另一元素还在窗口内就引爆
+    const pair = COMBO.pair[h.element];
+    if (pair && foe.elem[pair] > 0) comboBlast(foe, fx, fy, COMBO.bonus);
+    else foe.elem[h.element] = COMBO.window;
   }
   if (foe.hp <= 0) ko(foe);
 }
@@ -223,6 +239,7 @@ function updatePlayer(p, dt){
   p.stompCd = Math.max(0, p.stompCd - dt);
   p.blink -= dt; if (p.blink < -.12) p.blink = 2.2 + Math.random()*2;
   p.skills.forEach(s => s.t = Math.max(0, s.t - dt));
+  p.elem.shock = Math.max(0, p.elem.shock - dt); p.elem.flame = Math.max(0, p.elem.flame - dt);
   if (mods && mods.contactDamage){
     const foe = other(p);
     if (!foe.dead && p.stompCd <= 0 && Math.hypot(p.x-foe.x, p.y-foe.y) < p.r + foe.r){

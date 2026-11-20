@@ -73,6 +73,7 @@ const MAT = {
   ice: toon('#c8f2ff', { emissive: '#3aaee8', emissiveIntensity: .35 }),
   iceBlock: new THREE.MeshPhongMaterial({ color: '#d6f6ff', specular: '#ffffff', shininess: 90, transparent: true, opacity: .55, flatShading: true, depthWrite: false }),
   bolt: basic(hdrC('#bff6ff', 6)), boltGlow: basic(hdrC('#4fc8ff', 2.5), { transparent: true, opacity: .5, depthWrite: false }),
+  boltFire: basic(hdrC('#ffe3a0', 6)), boltFireGlow: basic(hdrC('#ff7a2a', 2.5), { transparent: true, opacity: .5, depthWrite: false }),
 };
 function mesh(geo, mat, shadow = true){ const m = new THREE.Mesh(geo, mat); m.castShadow = shadow; return m; }
 function outline(m, mat, k = 1.08){ const o = new THREE.Mesh(m.geometry, mat); o.scale.setScalar(k); m.add(o); return m; } // 背面外扩描边
@@ -366,21 +367,25 @@ const LOOKS = {
         s.position.set(Math.cos(s.userData.a)*r*.9, h/2, Math.sin(s.userData.a)*r*.9); s.scale.set(4, Math.max(.01, h), 4); }
     } };
   },
-  bot(en){ // 悬浮护卫机器人：金属脑袋 + 发光独眼 + 天线 + 底光晕，放电时画闪电束
+  bot(en){ // 悬浮护卫机器人：电击=冷色闪电，火焰=暖色火束（看 en.cfg.guard.attack）
+    const fire = en.cfg.guard && en.cfg.guard.attack === 'flame';
+    const glow = fire ? '#ff7a3d' : '#6ad0ff', eyeColor = fire ? '#ffc46a' : '#7fe3ff';
+    const shellColor = fire ? '#d98b52' : '#cfd8e0', shellDark = fire ? '#8a4a1e' : '#5b6b78';
+    const boltMat = fire ? MAT.boltFire : MAT.bolt, boltGlowMat = fire ? MAT.boltFireGlow : MAT.boltGlow;
     const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
-    const shell = toon('#cfd8e0'), shellLine = basic('#5b6b78', { side: THREE.BackSide });
+    const shell = toon(shellColor), shellLine = basic(shellDark, { side: THREE.BackSide });
     const head = outline(mesh(GEO.sphere, shell), shellLine, 1.08); head.scale.setScalar(11); body.add(head);
     const eyeMat = basic(hdrC('#ffffff', 2.5));
-    const eye = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.soft, color: hdrC('#7fe3ff', 2.6), blending: THREE.AdditiveBlending, depthWrite: false }));
+    const eye = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.soft, color: hdrC(eyeColor, 2.6), blending: THREE.AdditiveBlending, depthWrite: false }));
     eye.scale.setScalar(17); eye.position.set(0, 1, 9.5); body.add(eye);
     const pupil = mesh(GEO.lowSphere, MAT.ink, false); pupil.scale.setScalar(3.4); pupil.position.set(0, 1, 10.4); body.add(pupil);
     const antenna = mesh(GEO.cone, shell); antenna.scale.set(1.5, 7, 1.5); antenna.position.set(0, 13, 0); body.add(antenna);
     const tip = mesh(GEO.lowSphere, eyeMat, false); tip.scale.setScalar(2.2); tip.position.set(0, 17, 0); body.add(tip);
     const fins = [-1, 1].map(s => { const f = mesh(GEO.lowSphere, shell); f.scale.set(4, 3, 4.5); f.position.set(s*11, -3, 0); body.add(f); return f; });
-    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.soft, color: hdrC('#6ad0ff', 2), blending: THREE.AdditiveBlending, depthWrite: false }));
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.soft, color: hdrC(glow, 2), blending: THREE.AdditiveBlending, depthWrite: false }));
     halo.scale.setScalar(40); halo.position.y = -16; g.add(halo);
     const bolt = new THREE.Group(); world.add(bolt);
-    const light = takeLight(en, '#6ad0ff');
+    const light = takeLight(en, glow);
     return { obj: g, light, extra: bolt, update(en, t){
       g.position.set(wx(en.x), 42 + Math.sin(t*3.4 + en.seed)*5, wz(en.y)); // 悬浮起伏
       body.rotation.y = Math.sin(t*1.6 + en.seed)*.3;                       // 左右张望
@@ -397,7 +402,7 @@ const LOOKS = {
         const f = i/6, j = i < 6 ? 14 : 0, p = a.clone().lerp(b, f).add(V3((Math.random()-.5)*j*2, 0, (Math.random()-.5)*j*2));
         path.add(new THREE.LineCurve3(prev, p)); prev = p;
       }
-      bolt.add(new THREE.Mesh(new THREE.TubeGeometry(path, 36, 1.8, 5), MAT.bolt), new THREE.Mesh(new THREE.TubeGeometry(path, 36, 5, 6), MAT.boltGlow));
+      bolt.add(new THREE.Mesh(new THREE.TubeGeometry(path, 36, 1.8, 5), boltMat), new THREE.Mesh(new THREE.TubeGeometry(path, 36, 5, 6), boltGlowMat));
     } };
   },
   none(){ return { obj: new THREE.Group(), update(){} }; },
