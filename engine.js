@@ -30,7 +30,7 @@ function mkPlayer(c){
   return { name:c.name, color:c.color, dark:c.dark, image:c.image, x:c.spawnX, y:(H+TOP)/2, vx:0, vy:0,
     r:26, baseR:26, scale:1, scaleV:0, hp:100, kmap, skills:c.skills.map(id => ({ id, t:0 })),
     facing:c.spawnX < W/2 ? 1 : -1,
-    stun:0, spin:0, flash:0, wince:0, hitAng:0, castT:0, stompCd:0, mods:null, blink:0, dead:false };
+    stun:0, slowT:0, slowF:1, frozen:0, spin:0, flash:0, wince:0, hitAng:0, castT:0, stompCd:0, mods:null, blink:0, dead:false };
 }
 
 function reset(){
@@ -43,7 +43,7 @@ const other = p => p === p1 ? p2 : p1;
 function keyPressed(code){
   if (state !== 'play') return;
   for (const p of [p1, p2]) p.skills.forEach((s, i) => {
-    if (p.kmap['s'+i] === code && s.t <= 0 && p.stun <= 0) cast(p, s);
+    if (p.kmap['s'+i] === code && s.t <= 0 && p.stun <= 0 && p.frozen <= 0) cast(p, s);
   });
 }
 
@@ -111,6 +111,15 @@ const BEHAVIORS = {
     const o = en.owner; en.x = o.x; en.y = o.y;
     if (en.life - dt <= 0){ o.mods = null; puff(o.x, o.y, o.color, 14); popText(o.x, o.y-50, '变回来了', '#fff', 18); }
   },
+  nova(en, dt){ // 范围类：从施放点向外扩散的圈，圈扫到对手时命中一次
+    const c = en.cfg, foe = other(en.owner);
+    en.radius = c.radius * Math.min(1, en.age / c.expand);
+    if (!en.done && !foe.dead && Math.hypot(foe.x - en.x, foe.y - en.y) <= en.radius + foe.r){
+      en.done = true;
+      damage(foe, c.damage || 0, en.x, en.y, c.hit || {});
+      burst(foe.x, foe.y, (c.hit && c.hit.burst) || 'star', 12);
+    }
+  },
   zone(en, dt){ // 区域类：飘到对手头顶（hover 高度），每 every 秒对 zapR 范围放一次电
     const foe = other(en.owner), z = en.cfg.zone;
     const k = Math.min(1, dt * z.follow);
@@ -149,6 +158,10 @@ function damage(foe, dmg, fx, fy, h){
   bump(h.shake || 4, Math.cos(a), Math.sin(a));
   hitstop = Math.max(hitstop, h.stop ?? Math.min(.11, dmg*.008)); // 命中定格：伤害越高冻得越久
   popText(foe.x, foe.y - foe.r - 18, h.pop || ('-'+dmg), '#fff', 18 + Math.min(14, dmg*.8), h.pop ? '-'+dmg : null);
+  if (h.slow){ // 减速；已经在减速中又被命中、且配了 freeze，就冰冻
+    if (foe.slowT > 0 && h.freeze){ foe.slowT = 0; foe.frozen = h.freeze; foe.vx = foe.vy = 0; popText(foe.x, foe.y - foe.r - 48, '冻住了！', '#bff0ff', 24); }
+    else { foe.slowT = h.slow.duration; foe.slowF = h.slow.factor; }
+  }
   if (foe.hp <= 0) ko(foe);
 }
 function ko(loser){
@@ -161,11 +174,15 @@ function shout(p, text){ popText(p.x, p.y - p.r*p.scale - 30, text, '#fff', 18);
 /* ---------- 更新 ---------- */
 function updatePlayer(p, dt){
   if (p.dead){ p.spin += dt*6; return; }
-  const mods = p.mods, speed = TUNING.moveSpeed * (mods ? mods.speed : 1);
+  const mods = p.mods, speed = TUNING.moveSpeed * (mods ? mods.speed : 1) * (p.slowT > 0 ? p.slowF : 1);
   p.scaleV += (((mods ? mods.scale : 1) - p.scale)*180 - p.scaleV*14) * dt; // 弹簧：变身时先冲过头再回落
   p.scale += p.scaleV*dt;
   p.r = p.baseR * p.scale;
   if (p.stun > 0){ p.stun -= dt; p.spin += dt*14; p.vx *= Math.pow(.6, dt*2); p.vy *= Math.pow(.6, dt*2); }
+  else if (p.frozen > 0){ // 冰冻：不能动、不能放技能
+    p.frozen -= dt; p.vx *= Math.pow(.001, dt); p.vy *= Math.pow(.001, dt);
+    if (p.frozen <= 0) burst(p.x, p.y, 'frost', 14);
+  }
   else {
     p.spin = 0;
     let ax = 0, ay = 0;
@@ -184,6 +201,7 @@ function updatePlayer(p, dt){
   p.y = Math.max(TOP + p.r, Math.min(H - WALL - p.r, p.y));
   p.flash = Math.max(0, p.flash - dt); p.wince = Math.max(0, p.wince - dt);
   p.castT = Math.max(0, p.castT - dt);
+  p.slowT = Math.max(0, p.slowT - dt);
   p.stompCd = Math.max(0, p.stompCd - dt);
   p.blink -= dt; if (p.blink < -.12) p.blink = 2.2 + Math.random()*2;
   p.skills.forEach(s => s.t = Math.max(0, s.t - dt));

@@ -61,6 +61,7 @@ const GEO = {
   cone: new THREE.ConeGeometry(1, 1, 12), plane: new THREE.PlaneGeometry(1, 1),
   smile: new THREE.TorusGeometry(.2, .045, 6, 16, Math.PI), banana: new THREE.TorusGeometry(13, 4.5, 10, 24, Math.PI*.5),
   ring: new THREE.TorusGeometry(1, .05, 6, 48), star: starGeometry(),
+  flatRing: new THREE.RingGeometry(.9, 1, 72), disc: new THREE.CircleGeometry(1, 48), crystal: new THREE.IcosahedronGeometry(1, 1),
 };
 const MAT = {
   ink: basic('#2d2418'), eyeWhite: basic('#ffffff'),
@@ -69,6 +70,8 @@ const MAT = {
   banana: toon('#f5c518'), bananaLine: basic('#9c7a12', { side: THREE.BackSide }),
   cloud: toon('#727888'), cloudLine: basic('#3c404b', { side: THREE.BackSide }),
   star: basic(hdrC('#ffd34d', 2.2)), aura: basic(hdrC('#ffffff', 2.4), { transparent: true, opacity: .85 }),
+  ice: toon('#c8f2ff', { emissive: '#3aaee8', emissiveIntensity: .35 }),
+  iceBlock: new THREE.MeshPhongMaterial({ color: '#d6f6ff', specular: '#ffffff', shininess: 90, transparent: true, opacity: .55, flatShading: true, depthWrite: false }),
   bolt: basic(hdrC('#bff6ff', 6)), boltGlow: basic(hdrC('#4fc8ff', 2.5), { transparent: true, opacity: .5, depthWrite: false }),
 };
 function mesh(geo, mat, shadow = true){ const m = new THREE.Mesh(geo, mat); m.castShadow = shadow; return m; }
@@ -211,6 +214,11 @@ const FXP = {
     mat: PMAT.soft, behaviors: [new SizeOverLife(curve(.8, 1.1, 1.2, 1.3)), fade(.8)] }),
   shock: proto({ life: new ConstantValue(.35), size: new ConstantValue(1), n: 1, shape: new PointEmitter(),
     mat: PMAT.ring, mode: RenderMode.HorizontalBillBoard, behaviors: [new SizeOverLife(curve(.15, .75, .95, 1)), fade()] }),
+  frost: proto({ life: new IntervalValue(.4, .7), speed: new IntervalValue(100, 240), size: new IntervalValue(8, 14),
+    color: hdr('#a8ecff', 2.4), mat: PMAT.star, rot: new IntervalValue(0, 6.28), behaviors: [gravity(180), shrink(), fade(), new RotationOverLife(new IntervalValue(-5, 5))] }),
+  frostSpark: proto({ life: new IntervalValue(.25, .45), speed: new IntervalValue(160, 320), size: new IntervalValue(3, 5),
+    color: hdr('#9be8ff', 4), mat: PMAT.softAdd, mode: RenderMode.StretchedBillBoard, stretch: { speedFactor: .07, lengthFactor: 1 },
+    behaviors: [gravity(150), shrink(), fade()] }),
   confetti: proto({ life: new IntervalValue(1.6, 2.2), speed: new IntervalValue(20, 90), size: new IntervalValue(6, 9),
     mat: PMAT.square, rot: new IntervalValue(0, 6.28), shape: new SphereEmitter({ radius: 60, thickness: 1 }),
     behaviors: [gravity(170), new RotationOverLife(new IntervalValue(-8, 8)), fade()] }),
@@ -224,12 +232,13 @@ function play(p, x, y, h, o = {}){
   s.emitter.position.set(x, h, y);
   fxRoot.add(s.emitter); BATCH.addSystem(s);
 }
-const BURST_COLOR = { star: '#ffd34d', feather: '#ffffff', ember: '#ff7a2a', spark: '#4fc8ff' };
+const BURST_COLOR = { star: '#ffd34d', feather: '#ffffff', ember: '#ff7a2a', spark: '#4fc8ff', frost: '#9be8ff' };
 const CONFETTI = ['#ff6a6a', '#ffd34d', '#6adf7e', '#6ab8ff', '#c98bff'];
 const FX = { // 键 = fx.js 事件的 type
   burst(e){ const k = FXP[e.kind] ? e.kind : 'star';
     play(FXP[k], wx(e.x), wz(e.y), 24, { n: e.n });
     if (k === 'feather') play(FXP.star, wx(e.x), wz(e.y), 24, { n: e.n/2 });
+    if (k === 'frost') play(FXP.frostSpark, wx(e.x), wz(e.y), 24, { n: e.n });
     play(FXP.shock, wx(e.x), wz(e.y), 2, { color: hdr(BURST_COLOR[k], 1.6), size: 76 }); },
   boom(e){ const x = wx(e.x), z = wz(e.y);
     play(FXP.fire, x, z, 22); play(FXP.ember, x, z, 22, { n: e.n*2 }); play(FXP.smoke, x, z, 22, { n: 5 });
@@ -340,6 +349,23 @@ const LOOKS = {
       bolt.add(new THREE.Mesh(new THREE.TubeGeometry(path, 36, 1.8, 5), MAT.bolt), new THREE.Mesh(new THREE.TubeGeometry(path, 36, 5, 6), MAT.boltGlow));
     } };
   },
+  frostnova(en){ // 地面冰圈 + 一圈冒出来的冰刺，跟着 en.radius 扩散
+    const g = new THREE.Group(), ringM = basic(hdrC('#9be8ff', 2.2), { transparent: true, depthWrite: false }),
+      discM = basic('#c9f3ff', { transparent: true, opacity: .3, depthWrite: false });
+    const ring = new THREE.Mesh(GEO.flatRing, ringM), disc = new THREE.Mesh(GEO.disc, discM);
+    ring.rotation.x = disc.rotation.x = -Math.PI/2; ring.position.y = 1.5; disc.position.y = 1; g.add(disc, ring);
+    const shards = Array.from({ length: 16 }, (_, i) => { const s = mesh(GEO.cone, MAT.ice);
+      s.userData.a = i/16*Math.PI*2 + Math.random()*.2; s.userData.h = 14 + Math.random()*12; g.add(s); return s; });
+    const life0 = en.life; pulseLight(en.x, en.y, '#7fd8ff', 7000);
+    return { obj: g, update(en, t){
+      const r = Math.max(1, en.radius || 0), fadeK = Math.min(1, en.life/.25), grow = Math.min(1, (life0 - en.life)/.15);
+      g.position.set(wx(en.x), 0, wz(en.y));
+      ring.scale.set(r, r, 1); disc.scale.set(r, r, 1);
+      ringM.opacity = fadeK; discM.opacity = .3*fadeK;
+      for (const s of shards){ const h = s.userData.h * grow * fadeK;
+        s.position.set(Math.cos(s.userData.a)*r*.9, h/2, Math.sin(s.userData.a)*r*.9); s.scale.set(4, Math.max(.01, h), 4); }
+    } };
+  },
   none(){ return { obj: new THREE.Group(), update(){} }; },
 };
 
@@ -381,15 +407,16 @@ function makePlayerView(p){
   const aura = new THREE.Mesh(GEO.ring, MAT.aura); aura.rotation.x = -Math.PI/2; scene.add(aura);
   const stars = [0, 1, 2].map(() => { const s = mesh(GEO.star, MAT.star, false); s.scale.setScalar(6); scene.add(s); return s; });
   const img = p.image ? imageView(p.image, 2.3) : null; if (img) scene.add(img.obj);
-  return { p, root, yaw, squash, unyaw, spin, mat, face, eyes, mouth, aura, stars, img, body };
+  const ice = mesh(GEO.crystal, MAT.iceBlock, false); ice.rotation.set(.3, .5, .1); scene.add(ice);
+  return { p, root, yaw, squash, unyaw, spin, mat, face, eyes, mouth, aura, stars, img, body, ice };
 }
-function disposePlayerView(v){ scene.remove(v.root, v.aura, ...v.stars); if (v.img) scene.remove(v.img.obj); }
+function disposePlayerView(v){ scene.remove(v.root, v.aura, v.ice, ...v.stars); if (v.img) scene.remove(v.img.obj); }
 function updatePlayerView(v, p, t){
   const r = p.r, foe = other(p);
   let ang = Math.atan2(p.vy, p.vx), k = Math.min(.16, Math.hypot(p.vx, p.vy)/1600);
   if (p.wince > 0){ ang = p.hitAng; k = -p.wince*.55; }
   if (p.dead) k = 0;
-  const b = (1 + Math.sin(t*5)*.025) * (1 - p.castT); // 呼吸 + 施法前竖向压扁
+  const b = p.frozen > 0 ? 1 : (1 + Math.sin(t*5)*.025) * (1 - p.castT); // 呼吸 + 施法前竖向压扁；冰冻时不动
   v.yaw.rotation.y = -ang; v.unyaw.rotation.y = ang;
   v.squash.scale.set((1 + k)/Math.sqrt(b), b, 1/((1 + k)*Math.sqrt(b)));
   v.spin.scale.setScalar(r);
@@ -399,9 +426,12 @@ function updatePlayerView(v, p, t){
   const dx = foe.x - p.x, dz = foe.y - p.y, l = Math.hypot(dx, dz) || 1; // 脸：朝对手，同时偏向镜头
   v.face.rotation.set(0, -Math.atan2(dz/l*.5 + 1.2, dx/l*.5), .5);
   v.eyes.scale.y = p.dead || p.blink < 0 || p.wince > 0 ? .15 : 1;
-  v.mouth.rotation.z = p.wince > 0 || p.stun > 0 || p.dead ? 0 : Math.PI;
+  v.mouth.rotation.z = p.wince > 0 || p.stun > 0 || p.frozen > 0 || p.dead ? 0 : Math.PI;
   const f = p.flash/.14, red = p.wince*1.4;
-  v.mat.emissive.setRGB(f*2.5 + red*.9, f*2.5 + red*.15, f*2.5 + red*.1); // 闪白超过 1 会被 bloom 点亮
+  const cold = p.frozen > 0 ? .7 : p.slowT > 0 ? .35 : 0; // 减速发蓝，冰冻更蓝
+  v.mat.emissive.setRGB(f*2.5 + red*.9, f*2.5 + red*.15 + cold*.45, f*2.5 + red*.1 + cold); // 闪白超过 1 会被 bloom 点亮
+  v.ice.visible = p.frozen > 0;
+  if (p.frozen > 0){ v.ice.position.set(wx(p.x), r, wz(p.y)); v.ice.scale.setScalar(r*1.45); }
   v.aura.visible = !!p.mods;
   if (p.mods){ v.aura.position.set(wx(p.x), 3, wz(p.y)); v.aura.scale.setScalar(r + 10 + Math.sin(t*10)*3); }
   v.stars.forEach((s, i) => { s.visible = p.stun > 0;

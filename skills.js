@@ -9,6 +9,7 @@
    behavior 可选值见 engine.js 的 BEHAVIORS；draw 可选值见 render.js 的 LOOKS。
    look.image 可选（素材占位）：透明底 PNG 路径，写了就画图片，不写用 draw 函数。
    hit.stop 可选：命中定格秒数，不写按伤害自动算。
+   hit.slow 可选：{ factor 速度倍率, duration 秒 }；再配 hit.freeze（秒）则减速中再被命中会冰冻。
    key 是按键（字母直接写，如 'Q'；符号写 '.' '/' 等）；desc 显示在键位图例里。
    ============================================================================ */
 const SKILLS = {
@@ -48,6 +49,14 @@ const SKILLS = {
       hit:{ knockback:150, shake:5, burst:'spark', pop:'滋滋！' } },
     look:{ draw:'cloud' },
     shout:'乌云，去！'
+  },
+  frostnova: { // 范围类
+    label:'冰霜新星', key:'R', cd:6, desc:'❄️ 冰圈向外扩散，减速；减速中再中一次就冻住',
+    spawn:{ count:1, at:'self' },
+    entity:{ behavior:'nova', radius:150, expand:.35, life:.6, damage:8,
+      hit:{ knockback:90, shake:6, burst:'frost', pop:'好冷！', slow:{ factor:.45, duration:3 }, freeze:1.6 } },
+    look:{ draw:'frostnova' },
+    shout:'冰霜新星！'
   },
   giant: { // 变身类
     label:'巨人变身', key:'/', cd:8, desc:'💪 变大好几倍，撞人贼疼',

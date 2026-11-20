@@ -25,7 +25,7 @@ three.js 生态全部经 `index.html` 里的 importmap 从 jsDelivr 加载，版
 - `skills.js` — `SKILLS`：每个技能 = 一个配置对象，`spawn`（生成什么）× `entity`（`behavior` 怎么动 + `hit` 打击参数）× `look`（`draw` 造型名 + 颜色）。
 
 **框架层**
-- `engine.js` — 状态 + 规则，不碰 DOM、不知道 three.js。`cast()` 是所有技能的唯一施放路径；`BEHAVIORS` 按 `entity.behavior` 挑行为。命中统一走 `hitCheck()`/`damage()`：伤害、击退、命中定格 `hitstop`（`hit.stop` 可覆盖）、定向屏震、漂浮字都在这里。
+- `engine.js` — 状态 + 规则，不碰 DOM、不知道 three.js。`cast()` 是所有技能的唯一施放路径；`BEHAVIORS` 按 `entity.behavior` 挑行为。命中统一走 `hitCheck()`/`damage()`：伤害、击退、命中定格 `hitstop`（`hit.stop` 可覆盖）、定向屏震、漂浮字、状态效果（`hit.slow` 减速 / `hit.freeze` 减速中再中则冰冻）都在这里，任何技能配上就生效。
 - `fx.js` — 特效**事件队列**：引擎调 `burst/boom/ring/puff/smoke/scorch/confetti` 只是往 `fxQueue` 排事件，不画任何东西。漂浮字 `floats`、屏震 `shake/shakeDir`、闪白 `flashA` 是状态。`resetFx()` 递增 `fxEpoch`，渲染层据此清场。
 - `render.js` — three.js 场景，只读状态。三个按名挑选的注册表：
   - `LOOKS[look.draw](en)` 建实体模型，返回 `{ obj, update(en, t) }`；

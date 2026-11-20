@@ -11,7 +11,7 @@ const CHARACTERS = [
     name:'咕咕大王',
     color:'#f08c1e', dark:'#b5620a',
     keys:{ up:'KeyW', down:'KeyS', left:'KeyA', right:'KeyD' },
-    skills:['chickens','banana'],
+    skills:['chickens','banana','frostnova'],
     spawnX:200,
     // image:'assets/gugu.png',
   },
