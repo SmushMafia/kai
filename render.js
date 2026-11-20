@@ -366,6 +366,40 @@ const LOOKS = {
         s.position.set(Math.cos(s.userData.a)*r*.9, h/2, Math.sin(s.userData.a)*r*.9); s.scale.set(4, Math.max(.01, h), 4); }
     } };
   },
+  bot(en){ // 悬浮护卫机器人：金属脑袋 + 发光独眼 + 天线 + 底光晕，放电时画闪电束
+    const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+    const shell = toon('#cfd8e0'), shellLine = basic('#5b6b78', { side: THREE.BackSide });
+    const head = outline(mesh(GEO.sphere, shell), shellLine, 1.08); head.scale.setScalar(11); body.add(head);
+    const eyeMat = basic(hdrC('#ffffff', 2.5));
+    const eye = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.soft, color: hdrC('#7fe3ff', 2.6), blending: THREE.AdditiveBlending, depthWrite: false }));
+    eye.scale.setScalar(17); eye.position.set(0, 1, 9.5); body.add(eye);
+    const pupil = mesh(GEO.lowSphere, MAT.ink, false); pupil.scale.setScalar(3.4); pupil.position.set(0, 1, 10.4); body.add(pupil);
+    const antenna = mesh(GEO.cone, shell); antenna.scale.set(1.5, 7, 1.5); antenna.position.set(0, 13, 0); body.add(antenna);
+    const tip = mesh(GEO.lowSphere, eyeMat, false); tip.scale.setScalar(2.2); tip.position.set(0, 17, 0); body.add(tip);
+    const fins = [-1, 1].map(s => { const f = mesh(GEO.lowSphere, shell); f.scale.set(4, 3, 4.5); f.position.set(s*11, -3, 0); body.add(f); return f; });
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.soft, color: hdrC('#6ad0ff', 2), blending: THREE.AdditiveBlending, depthWrite: false }));
+    halo.scale.setScalar(40); halo.position.y = -16; g.add(halo);
+    const bolt = new THREE.Group(); world.add(bolt);
+    const light = takeLight(en, '#6ad0ff');
+    return { obj: g, light, extra: bolt, update(en, t){
+      g.position.set(wx(en.x), 42 + Math.sin(t*3.4 + en.seed)*5, wz(en.y)); // 悬浮起伏
+      body.rotation.y = Math.sin(t*1.6 + en.seed)*.3;                       // 左右张望
+      fins.forEach((f, i) => f.rotation.z = Math.sin(t*9 + i*Math.PI + en.seed)*.35);
+      const lit = en.boltT > 0;
+      eyeMat.color.copy(hdrC('#ffffff', lit ? 5 : 2.5));
+      pupil.visible = !lit;
+      if (light){ light.l.position.copy(g.position); light.l.intensity = lit ? 9000 : 2200; }
+      bolt.clear();
+      if (!lit) return;
+      const a = V3(g.position.x, g.position.y - 10, g.position.z), b = V3(wx(en.boltX), 24, wz(en.boltY)), path = new THREE.CurvePath();
+      let prev = a;
+      for (let i = 1; i <= 6; i++){
+        const f = i/6, j = i < 6 ? 14 : 0, p = a.clone().lerp(b, f).add(V3((Math.random()-.5)*j*2, 0, (Math.random()-.5)*j*2));
+        path.add(new THREE.LineCurve3(prev, p)); prev = p;
+      }
+      bolt.add(new THREE.Mesh(new THREE.TubeGeometry(path, 36, 1.8, 5), MAT.bolt), new THREE.Mesh(new THREE.TubeGeometry(path, 36, 5, 6), MAT.boltGlow));
+    } };
+  },
   none(){ return { obj: new THREE.Group(), update(){} }; },
 };
 

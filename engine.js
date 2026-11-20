@@ -138,6 +138,24 @@ const BEHAVIORS = {
       }
     }
   },
+  guard(en, dt){ // 守卫类：绕着主人公转，对手靠近主人就每隔 every 秒放电一次
+    const o = en.owner, foe = other(o), g = en.cfg.guard;
+    if (o.dead){ en.life = 0; return; }
+    const a = en.age * (g.spin || 2.2) + en.seed * Math.PI * 2;
+    en.x = o.x + Math.cos(a) * g.orbitR;
+    en.y = o.y + Math.sin(a) * g.orbitR;
+    en.boltT = Math.max(0, (en.boltT || 0) - dt);
+    en.atkT = (en.atkT || 0) + dt;
+    if (en.atkT >= g.every){
+      en.atkT = 0;
+      if (!foe.dead && Math.hypot(foe.x - o.x, foe.y - o.y) <= g.range){
+        en.boltT = .16; en.boltX = foe.x; en.boltY = foe.y;
+        flash(.12);
+        damage(foe, en.cfg.damage || 0, en.x, en.y, en.cfg.hit || {});
+        burst(foe.x, foe.y, (en.cfg.hit && en.cfg.hit.burst) || 'spark', 9);
+      }
+    }
+  },
 };
 
 /* ---------- 命中：引擎层统一打击感 ---------- */

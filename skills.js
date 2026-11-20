@@ -15,4 +15,13 @@
    key 是按键（字母直接写，如 'Q'；符号写 '.' '/' 等）；desc 显示在键位图例里。
    ============================================================================ */
 const SKILLS = {
+  guardbot: { // 召唤/守卫类
+    label:'护卫机器人', key:'Q', cd:9, desc:'🤖 悬浮机器人绕身护卫，对手靠近就电击',
+    spawn:{ count:1, at:'self' },
+    entity:{ behavior:'guard', life:12, r:16, damage:7,
+      guard:{ orbitR:72, spin:2.2, range:170, every:1.1 },
+      hit:{ knockback:190, shake:5, burst:'spark', pop:'滋！' } },
+    look:{ draw:'bot', color:'#6ad0ff' },
+    shout:'护卫就位！'
+  },
 };
