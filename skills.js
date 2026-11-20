@@ -54,7 +54,7 @@ const SKILLS = {
     label:'冰霜新星', key:'R', cd:6, desc:'❄️ 冰圈向外扩散，减速；减速中再中一次就冻住',
     spawn:{ count:1, at:'self' },
     entity:{ behavior:'nova', radius:150, expand:.35, life:.6, damage:8,
-      hit:{ knockback:90, shake:6, burst:'frost', pop:'好冷！', slow:{ factor:.45, duration:3 }, freeze:1.6 } },
+      hit:{ knockback:90, shake:6, burst:'frost', pop:'好冷！', slow:{ factor:.45, duration:8 }, freeze:1.6 } },
     look:{ draw:'frostnova' },
     shout:'冰霜新星！'
   },
